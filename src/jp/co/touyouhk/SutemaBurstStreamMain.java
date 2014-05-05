@@ -30,131 +30,140 @@ import org.codehaus.jackson.map.ObjectMapper;
  * ステマ バースト ストリーム
  * SutemaBurstStream (SBS)
  * Version 0.1
+ *
  * @author touyouhk
  */
 public class SutemaBurstStreamMain {
 
-	public static final String subjectTextDirectory = "subjectText";
+    public static final String subjectTextDirectory = "subjectText";
 
-	//JSON
-	//http://gihyo.jp/dev/serial/01/engineer_toolbox/0028
-	//http://gihyo.jp/dev/serial/01/engineer_toolbox/0027?page=1
+    //JSON
+    //http://gihyo.jp/dev/serial/01/engineer_toolbox/0028
+    //http://gihyo.jp/dev/serial/01/engineer_toolbox/0027?page=1
 
-	// ループする時間間隔(分単位)
-	public static int loopTime = 30;//デフォルト
+    // ループする時間間隔(分単位)
+    public static int loopTime = 30;//デフォルト
 
-	// ループのカウンタ
-	private static int loopConter;
+    // ループのカウンタ
+    private static int loopConter;
 
-	private static String sbsConfFileName = "sbs_conf.json";
+    private static String sbsConfFileName = "sbs_conf.json";
 
-	/**
-	 * @param args　コマンドライン引数
-	 * @throws ClassNotFoundException
-	 * @throws IOException
-	 * @throws JsonMappingException
-	 * @throws JsonParseException
-	 * @throws EmailException
-	 * @throws InterruptedException
-	 */
-	public static void main(String[] args) throws ClassNotFoundException, JsonParseException, JsonMappingException,
-			IOException, EmailException, InterruptedException {
+    /**
+     * @param args 　コマンドライン引数
+     * @throws ClassNotFoundException
+     * @throws IOException
+     * @throws JsonMappingException
+     * @throws JsonParseException
+     * @throws EmailException
+     * @throws InterruptedException
+     */
+    public static void main(String[] args) throws ClassNotFoundException, JsonParseException, JsonMappingException,
+            IOException, EmailException, InterruptedException {
 
-		Class.forName("org.sqlite.JDBC");
+        Class.forName("org.sqlite.JDBC");
 
-		List<ZweiConf> zweiConfList;
+        List<ZweiConf> zweiConfList;
 
-		// ■コマンドライン引数解釈
-		try {
-			if (!parseArgument(args)) {
-				//失敗ならアプリを終了
-				System.exit(-1);
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+        // ■コマンドライン引数解釈
+        try {
+            if (!parseArgument(args)) {
+                //失敗ならアプリを終了
+                System.exit(-1);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
-		// ObjectMapperを作成
-		ObjectMapper mapper = new ObjectMapper();
-		// mydata.jsonからルートノードを取得
-		JsonNode rootNode = mapper.readValue(new File(args[0]), JsonNode.class);
+        // ObjectMapperを作成
+        ObjectMapper mapper = new ObjectMapper();
+        // mydata.jsonからルートノードを取得
+        JsonNode rootNode = mapper.readValue(new File(args[0]), JsonNode.class);
 
-		zweiConfList = parseZweiConf(rootNode);
+        zweiConfList = parseZweiConf(rootNode);
 
-		JsonNode sbsNode = mapper.readValue(new File(sbsConfFileName), JsonNode.class);
-		MailConf mailConf = parseSbsConf(sbsNode);
+        JsonNode sbsNode = mapper.readValue(new File(sbsConfFileName), JsonNode.class);
+        MailConf mailConf = parseSbsConf(sbsNode);
 
-		//System.exit(0);
+        //System.exit(0);
 
-		String mailLine = "";
-		while (true) {
-			loopConter++;
-			System.out.println("------------ ループ " + loopConter + "回目");
+        String mailLine = "";
+        while (true) {
+            loopConter++;
+            System.out.println("------------ ループ " + loopConter + "回目");
 
-			for (ZweiConf zweiConf : zweiConfList) {
-				String result = execute(zweiConf);
-				if (result != "" && result != null) {
-					mailLine += result;
-				}
-			}
+            for (ZweiConf zweiConf : zweiConfList) {
+                String result = execute(zweiConf);
+                if (result != "" && result != null) {
+                    mailLine += result;
+                }
+            }
 
-			//Mail送信
-			if (mailLine != "" &&  mailLine.length() > 0) {
-				System.out.println("メールを送信します。");
+            //Mail送信
+            if (mailLine != "" && mailLine.length() > 0) {
+                System.out.println("メールを送信します。");
 
-				try {
-					sendMail(mailConf, mailLine);
-					mailLine = "";
-				} catch (Exception e) {
-					// 一度だけリトライする
-					Thread.sleep(1000 * 60);
-					try {
-						sendMail(mailConf, mailLine);
-						mailLine = "";
-					} catch (Exception ee) {
-						System.out.println("Eメール送信エラー" + ee.toString());
-					}
-				}
-			} else {
-				System.out.println("メールを送信しません。");
-			}
+                try {
+                    sendMail(mailConf, mailLine);
+                    mailLine = "";
+                } catch (Exception e) {
+                    // 一度だけリトライする
+                    Thread.sleep(1000 * 60);
+                    try {
+                        sendMail(mailConf, mailLine);
+                        mailLine = "";
+                    } catch (Exception ee) {
+                        System.out.println("Eメール送信エラー" + ee.toString());
+                    }
+                }
+            } else {
+                System.out.println("メールを送信しません。");
+            }
 
-			// ■スリープ
-			endLoopWorkAndSleep();
-		}
+            // ■スリープ
+            endLoopWorkAndSleep();
+        }
 
-	}
+    }
 
-	public static String execute(ZweiConf zweiConf) throws UnsupportedEncodingException {
+    public static String execute(ZweiConf zweiConf) throws UnsupportedEncodingException {
 
-		// TODO 毎回チェックするのは無駄なので処理をかえる
-		// ■subject.txt保存フォルダの生成
-		String saveFolder = saveFolderCreate(zweiConf.getUrl());
-		if (saveFolder == null) {
-			//失敗ならアプリを終了
-			System.exit(-1);
-		}
+        // TODO 毎回チェックするのは無駄なので処理をかえる
+        // ■subject.txt保存フォルダの生成
+        String saveFolder = saveFolderCreate(zweiConf.getUrl());
+        if (saveFolder == null) {
+            //失敗ならアプリを終了
+            System.exit(-1);
+        }
 
-		// ■subjectTextダウンロード
-		String subjectFileNameFullPath = SubjectTextUtil.download(zweiConf.getUrl(),
-				saveFolder);
+        // ■subjectTextダウンロード
+        String subjectFileNameFullPath = SubjectTextUtil.download(zweiConf.getUrl(),
+                saveFolder);
 
-		if (subjectFileNameFullPath == null) {
-			System.out.println("subject.txtのダウンロードに失敗");
-			return null;
-		}
+        if (subjectFileNameFullPath == null) {
+            System.out.println("subject.txtのダウンロードに失敗");
+            return null;
+        }
 
-		// ■subjectTextのモデルの作成
-		List<SubjectTextEntity> subjectTextEntities = SubjectTextUtil
-				.subjectText2Entity(subjectFileNameFullPath);
+        // ■subjectTextのモデルの作成
+        List<SubjectTextEntity> subjectTextEntities = SubjectTextUtil
+                .subjectText2Entity(subjectFileNameFullPath);
 
         List<String> mailStrings = new ArrayList<>();
 
-		for (SubjectTextEntity subjectTextEntity : subjectTextEntities) {
+        for (SubjectTextEntity subjectTextEntity : subjectTextEntities) {
 
-			String title = new String(subjectTextEntity.getTitle().getBytes("UTF-8"), "UTF-8");
+            String title = new String(subjectTextEntity.getTitle().getBytes("UTF-8"), "UTF-8");
 
-			for (String keyword : zweiConf.getKeyWords()) {
+            zweiConf.getKeyWords().parallelStream().filter(s -> title.indexOf(s) != -1).forEach(s -> {
+                    String result = register(zweiConf, subjectTextEntity, s);
+                     if (result != null) {
+                        mailStrings.add(result);
+                     }
+                }
+            );
+             /*
+            for (String keyword : zweiConf.getKeyWords()) {
 				if (title.indexOf(keyword) != -1) {
                         String result = register(zweiConf, subjectTextEntity, keyword);
                         if (result != null){
@@ -162,14 +171,14 @@ public class SutemaBurstStreamMain {
                         }
 					break;
 				}
-			}
-		}
+			}*/
+        }
 
-		return mailStrings.stream().collect(Collectors.joining(","));
+        return mailStrings.parallelStream().collect(Collectors.joining());
 
-	}
+    }
 
-    public static String register(ZweiConf zweiConf, SubjectTextEntity subjectTextEntity,String keyword) {
+    public static String register(ZweiConf zweiConf, SubjectTextEntity subjectTextEntity, String keyword) {
         String mailString = null;
         QueueDAO dao = new QueueDAO(Util.boardUrl2EnglishName(zweiConf.getUrl()));
         try {
@@ -186,8 +195,7 @@ public class SutemaBurstStreamMain {
         } catch (Exception e) {
             // キーワードがスレ番号が異常なものに引っかかる場合（9から始まるものとか）
             System.out.println(e);
-        }
-        finally {
+        } finally {
             dao.closeHandler();
         }
 
@@ -195,148 +203,151 @@ public class SutemaBurstStreamMain {
     }
 
 
-	public static void sendMail(MailConf mailConf, String mailLine) throws EmailException {
-		Email email = new SimpleEmail();
-		email.setHostName(mailConf.getSmtp_server());
-		email.setSmtpPort(mailConf.getSmtp_port());
-		email.setAuthenticator(new DefaultAuthenticator(mailConf.getUser_name(), mailConf.getPassword()));
-		email.setSSLOnConnect(mailConf.isSmtp_ssl_flag());
-		email.setFrom(mailConf.getSrc_mail_adress());
-		email.setSubject(Constant.SOFTWARE_NAME + " " + System.currentTimeMillis());
-		email.setContent(mailLine, "text/plain; charset=ISO-2022-JP");
-		email.setCharset("ISO-2022-JP");
-		//			try {
-		//				email.setMsg(new String(mailLine.getBytes("iso-2022-jp")));
-		//			} catch (UnsupportedEncodingException e) {
-		//				// TODO 自動生成された catch ブロック
-		//				e.printStackTrace();
-		//			}
-		email.addTo(mailConf.getDest_mail_adress());
-		email.send();
-	}
+    public static void sendMail(MailConf mailConf, String mailLine) throws EmailException {
+        Email email = new SimpleEmail();
+        email.setHostName(mailConf.getSmtp_server());
+        email.setSmtpPort(mailConf.getSmtp_port());
+        email.setAuthenticator(new DefaultAuthenticator(mailConf.getUser_name(), mailConf.getPassword()));
+        email.setSSLOnConnect(mailConf.isSmtp_ssl_flag());
+        email.setFrom(mailConf.getSrc_mail_adress());
+        email.setSubject(Constant.SOFTWARE_NAME + " " + System.currentTimeMillis());
+        email.setContent(mailLine, "text/plain; charset=ISO-2022-JP");
+        email.setCharset("ISO-2022-JP");
+        //			try {
+        //				email.setMsg(new String(mailLine.getBytes("iso-2022-jp")));
+        //			} catch (UnsupportedEncodingException e) {
+        //				// TODO 自動生成された catch ブロック
+        //				e.printStackTrace();
+        //			}
+        email.addTo(mailConf.getDest_mail_adress());
+        email.send();
+    }
 
-	/**
-	 * メインクラスに渡された引数を解釈して変数に格納します。
-	 * 引数が足りない場合false、それ以外true
-	 * @param argument メインクラスに渡された引数
-	 * @return 成功したらtrue、失敗したらfalse
-	 * @throws IOException
-	 * @throws JsonMappingException
-	 * @throws JsonParseException
-	 */
-	public static boolean parseArgument(String[] argument) throws JsonParseException, JsonMappingException, IOException {
+    /**
+     * メインクラスに渡された引数を解釈して変数に格納します。
+     * 引数が足りない場合false、それ以外true
+     *
+     * @param argument メインクラスに渡された引数
+     * @return 成功したらtrue、失敗したらfalse
+     * @throws IOException
+     * @throws JsonMappingException
+     * @throws JsonParseException
+     */
+    public static boolean parseArgument(String[] argument) throws JsonParseException, JsonMappingException, IOException {
 
-		if (argument.length == 0) {
-			return false;
-		}
+        if (argument.length == 0) {
+            return false;
+        }
 
-		return true;
-	}
+        return true;
+    }
 
-	/**
-	 * Subject.txtフォルダを生成します
-	 * すでにフォルダが生成されている場合は処理をせずに成功とみなします。
-	 * @return 成功したら、フォルダのフルパスを返却、失敗したらNULL
-	 */
-	public static String saveFolderCreate(String itaUrl) {
-		// ファイル区切り文字 (UNIX では「/」,Windowsでは「\」)
-		String fileSeparator = System.getProperties().getProperty(
-				"file.separator");
+    /**
+     * Subject.txtフォルダを生成します
+     * すでにフォルダが生成されている場合は処理をせずに成功とみなします。
+     *
+     * @return 成功したら、フォルダのフルパスを返却、失敗したらNULL
+     */
+    public static String saveFolderCreate(String itaUrl) {
+        // ファイル区切り文字 (UNIX では「/」,Windowsでは「\」)
+        String fileSeparator = System.getProperties().getProperty(
+                "file.separator");
 
-		// カレントディレクトリの取得 eg: C:\work
-		String currentDirectory = System.getProperties().getProperty("user.dir");
+        // カレントディレクトリの取得 eg: C:\work
+        String currentDirectory = System.getProperties().getProperty("user.dir");
 
-		//URLから板の英名抽出
-		String[] itaUrls = itaUrl.split("/");
-		String itaName = (itaUrls[itaUrls.length - 1]);
+        //URLから板の英名抽出
+        String[] itaUrls = itaUrl.split("/");
+        String itaName = (itaUrls[itaUrls.length - 1]);
 
-		// subjectフォルダーのパス名の生成
-		// subjectTextフォルダの中に板名でフォルダを作成します
-		String createDirectoryPath = currentDirectory + fileSeparator
-				+ subjectTextDirectory + fileSeparator + itaName;
+        // subjectフォルダーのパス名の生成
+        // subjectTextフォルダの中に板名でフォルダを作成します
+        String createDirectoryPath = currentDirectory + fileSeparator
+                + subjectTextDirectory + fileSeparator + itaName;
 
-		if (UniversalUtil.createDirectryExistCheak(createDirectoryPath)) {
-			return createDirectoryPath;
-		} else {
-			return null;
-		}
+        if (UniversalUtil.createDirectryExistCheak(createDirectoryPath)) {
+            return createDirectoryPath;
+        } else {
+            return null;
+        }
 
-	}
+    }
 
-	/**
-	 * 1ループ終了時の共通的な終了処理と、スレッドスリープを呼び出します。
-	 * スレッドスリープでの失敗は異常ルートなのでプロセスを終了させます。
-	 * @return true
-	 */
-	public static boolean endLoopWorkAndSleep() {
-		// ■スリープ
-		System.out.println("スリープモードに移行します " + loopTime + "分");
-		try {
-			Thread.sleep(loopTime * 1000 * 60);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-			// スレッドの割り込み例外・・異常ルート
-			System.exit(-1);
-		}
-		return true;
-	}
+    /**
+     * 1ループ終了時の共通的な終了処理と、スレッドスリープを呼び出します。
+     * スレッドスリープでの失敗は異常ルートなのでプロセスを終了させます。
+     *
+     * @return true
+     */
+    public static boolean endLoopWorkAndSleep() {
+        // ■スリープ
+        System.out.println("スリープモードに移行します " + loopTime + "分");
+        try {
+            Thread.sleep(loopTime * 1000 * 60);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            // スレッドの割り込み例外・・異常ルート
+            System.exit(-1);
+        }
+        return true;
+    }
 
-	public static List<ZweiConf> parseZweiConf(JsonNode rootNode) {
+    public static List<ZweiConf> parseZweiConf(JsonNode rootNode) {
 
-		List<ZweiConf> zweiConfList = new ArrayList<ZweiConf>();
+        List<ZweiConf> zweiConfList = new ArrayList<ZweiConf>();
 
-		Iterator<String> itaField = rootNode.getFieldNames();
-		while (itaField.hasNext()) {
+        Iterator<String> itaField = rootNode.getFieldNames();
+        while (itaField.hasNext()) {
 
-			ZweiConf zweiConf = new ZweiConf();
+            ZweiConf zweiConf = new ZweiConf();
 
-			String itaNodeField = itaField.next();
-			zweiConf.setItaName(itaNodeField);
+            String itaNodeField = itaField.next();
+            zweiConf.setItaName(itaNodeField);
 
-			//System.out.println("    " + itaNodeField + ": " + rootNode.get(itaNodeField));
+            //System.out.println("    " + itaNodeField + ": " + rootNode.get(itaNodeField));
 
-			//JsonNode current = rootNode.get(itaNodeField);
+            //JsonNode current = rootNode.get(itaNodeField);
 
-			JsonNode url = rootNode.get(itaNodeField).get("url");
-			zweiConf.setUrl(url.getTextValue());
+            JsonNode url = rootNode.get(itaNodeField).get("url");
+            zweiConf.setUrl(url.getTextValue());
 
-			JsonNode keywords = rootNode.get(itaNodeField).get("keywords");
-			System.out.println(url.getTextValue());
+            JsonNode keywords = rootNode.get(itaNodeField).get("keywords");
+            System.out.println(url.getTextValue());
 
-			Iterator<JsonNode> keywordList = keywords.getElements();
+            Iterator<JsonNode> keywordList = keywords.getElements();
 
-			List<String> keyWordArrayList = new ArrayList<String>();
-			while (keywordList.hasNext()) {
+            List<String> keyWordArrayList = new ArrayList<String>();
+            while (keywordList.hasNext()) {
 
-				//System.out.println(keywordList.next().toString());
-				keyWordArrayList.add(keywordList.next().getTextValue());
-			}
+                //System.out.println(keywordList.next().toString());
+                keyWordArrayList.add(keywordList.next().getTextValue());
+            }
 
-			zweiConf.setKeyWords(keyWordArrayList);
-			zweiConfList.add(zweiConf);
-		}
+            zweiConf.setKeyWords(keyWordArrayList);
+            zweiConfList.add(zweiConf);
+        }
 
-		return zweiConfList;
+        return zweiConfList;
 
-	}
+    }
 
-	public static MailConf parseSbsConf(JsonNode rootNode) {
+    public static MailConf parseSbsConf(JsonNode rootNode) {
 
-		JsonNode loop_node = rootNode.get("loop_minute");
-		loopTime = loop_node.asInt();
+        JsonNode loop_node = rootNode.get("loop_minute");
+        loopTime = loop_node.asInt();
 
-		JsonNode mail_node = rootNode.get("mail");
-		MailConf mailConf = new MailConf();
+        JsonNode mail_node = rootNode.get("mail");
+        MailConf mailConf = new MailConf();
 
-		mailConf.setSmtp_server(mail_node.get("smtp_server").getTextValue());
-		mailConf.setSmtp_port(mail_node.get("smtp_port").asInt());
-		mailConf.setSmtp_ssl_flag(mail_node.get("smtp_ssl_flag").asBoolean());
-		mailConf.setUser_name(mail_node.get("user_name").getTextValue());
-		mailConf.setPassword(mail_node.get("password").getTextValue());
-		mailConf.setSrc_mail_adress(mail_node.get("src_mail_adress").getTextValue());
-		mailConf.setDest_mail_adress(mail_node.get("dest_mail_adress").getTextValue());
-		return mailConf;
+        mailConf.setSmtp_server(mail_node.get("smtp_server").getTextValue());
+        mailConf.setSmtp_port(mail_node.get("smtp_port").asInt());
+        mailConf.setSmtp_ssl_flag(mail_node.get("smtp_ssl_flag").asBoolean());
+        mailConf.setUser_name(mail_node.get("user_name").getTextValue());
+        mailConf.setPassword(mail_node.get("password").getTextValue());
+        mailConf.setSrc_mail_adress(mail_node.get("src_mail_adress").getTextValue());
+        mailConf.setDest_mail_adress(mail_node.get("dest_mail_adress").getTextValue());
+        return mailConf;
 
-	}
+    }
 
 }
