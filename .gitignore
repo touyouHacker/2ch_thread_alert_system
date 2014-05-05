@@ -18,6 +18,7 @@ conf/*
 sbs_conf.json
 subjectText/*
 sutemaBurstStream_Queue.sqlite
+tool/test/*
 
 #IntelliJ
 out/*
