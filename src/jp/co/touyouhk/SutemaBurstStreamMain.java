@@ -6,6 +6,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import jp.co.touyouhk.nichannel.Util;
 import jp.co.touyouhk.nichannel.subjecttext.SubjectTextEntity;
@@ -98,7 +99,7 @@ public class SutemaBurstStreamMain {
 			}
 
 			//Mail送信
-			if (mailLine != "") {
+			if (mailLine != "" &&  mailLine.length() > 0) {
 				System.out.println("メールを送信します。");
 
 				try {
@@ -126,8 +127,6 @@ public class SutemaBurstStreamMain {
 
 	public static String execute(ZweiConf zweiConf) throws UnsupportedEncodingException {
 
-		String mailString = "";
-
 		// TODO 毎回チェックするのは無駄なので処理をかえる
 		// ■subject.txt保存フォルダの生成
 		String saveFolder = saveFolderCreate(zweiConf.getUrl());
@@ -145,52 +144,56 @@ public class SutemaBurstStreamMain {
 			return null;
 		}
 
-		QueueDAO dao = new QueueDAO(Util.boardUrl2EnglishName(zweiConf.getUrl()));
-
 		// ■subjectTextのモデルの作成
 		List<SubjectTextEntity> subjectTextEntities = SubjectTextUtil
 				.subjectText2Entity(subjectFileNameFullPath);
+
+        List<String> mailStrings = new ArrayList<>();
 
 		for (SubjectTextEntity subjectTextEntity : subjectTextEntities) {
 
 			String title = new String(subjectTextEntity.getTitle().getBytes("UTF-8"), "UTF-8");
 
-			//TODO キーワード検索
-			boolean match = false;
-			String matchKeyWord = null;
-
 			for (String keyword : zweiConf.getKeyWords()) {
 				if (title.indexOf(keyword) != -1) {
-					match = true;
-					matchKeyWord = keyword;
+                        String result = register(zweiConf, subjectTextEntity, keyword);
+                        if (result != null){
+                            mailStrings.add(result);
+                        }
 					break;
-				}
-			}
-
-			if (match) {
-
-				try {
-
-					if (!dao.findById(Integer.valueOf(subjectTextEntity.getThreadNumber()))) {
-
-						dao.regist(Integer.valueOf(subjectTextEntity.getThreadNumber()),
-								title, matchKeyWord);
-
-						mailString += "[" + zweiConf.getItaName() + "]" + " " + title + " /key= " +
-								matchKeyWord + System.getProperty("line.separator") + "====================" +
-								System.getProperty("line.separator");
-					}
-				} catch (Exception e) {
-					// キーワードがスレ番号が異常なものに引っかかる場合（9から始まるものとか）
-					System.out.println(e);
 				}
 			}
 		}
 
-		dao.closeHandler();
-		return mailString;
+		return mailStrings.stream().collect(Collectors.joining(","));
 
 	}
+
+    public static String register(ZweiConf zweiConf, SubjectTextEntity subjectTextEntity,String keyword) {
+        String mailString = null;
+        QueueDAO dao = new QueueDAO(Util.boardUrl2EnglishName(zweiConf.getUrl()));
+        try {
+
+            if (!dao.findById(Integer.valueOf(subjectTextEntity.getThreadNumber()))) {
+
+                dao.regist(Integer.valueOf(subjectTextEntity.getThreadNumber()),
+                        subjectTextEntity.getTitle(), keyword);
+
+                mailString = "[" + zweiConf.getItaName() + "]" + " " + subjectTextEntity.getTitle() + " /key= " +
+                        keyword + System.getProperty("line.separator") + "====================" +
+                        System.getProperty("line.separator");
+            }
+        } catch (Exception e) {
+            // キーワードがスレ番号が異常なものに引っかかる場合（9から始まるものとか）
+            System.out.println(e);
+        }
+        finally {
+            dao.closeHandler();
+        }
+
+        return mailString;
+    }
+
 
 	public static void sendMail(MailConf mailConf, String mailLine) throws EmailException {
 		Email email = new SimpleEmail();
